@@ -116,6 +116,39 @@
   .auto-toggle .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
   .auto-toggle.on .dot { background: var(--buy); box-shadow: 0 0 0 3px var(--buy-dim); }
 
+  .session-strip {
+    display: flex;
+    gap: 8px;
+    padding: 8px 16px 0;
+    max-width: var(--content-width);
+    margin: 0 auto;
+    flex-wrap: wrap;
+  }
+  .session-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .session-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); flex-shrink: 0; }
+  .session-chip.active { color: var(--text); }
+  .session-chip.active .dot { background: var(--buy); box-shadow: 0 0 0 3px var(--buy-dim); }
+  .session-chip.relevant { border-color: var(--accent); }
+  .session-note {
+    padding: 6px 16px 0;
+    max-width: var(--content-width);
+    margin: 0 auto;
+    font-size: 0.76rem;
+    color: var(--muted);
+  }
+  .session-note.live { color: var(--buy); font-weight: 600; }
+  .session-note.closed { color: var(--sell); font-weight: 600; }
+
   .consensus-banner {
     max-width: var(--content-width);
     margin: 10px auto 0;
@@ -451,6 +484,9 @@
       <button class="icon-btn" id="refreshBtn" aria-label="Refresh now">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
       </button>
+      <button class="icon-btn" id="logoutBtn" aria-label="Log out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
     </div>
   </div>
 </header>
@@ -468,6 +504,9 @@
     </span>
   </span>
 </div>
+
+<div class="session-strip" id="sessionStrip"></div>
+<div class="session-note" id="sessionNote"></div>
 
 <div class="consensus-banner" id="consensusBanner"></div>
 
@@ -487,6 +526,22 @@ const API_BASE = 'https://trading-ai-bot-marks-projects-a0532bf7.vercel.app';
 const PAIRS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'USD/CHF', 'NZD/USD', 'EUR/GBP'];
 const REFRESH_SECONDS = 300;
 
+// Forex session hours in UTC. Sydney wraps midnight (22:00 -> 07:00).
+const SESSIONS = [
+  { name: 'Sydney', start: 22, end: 7 },
+  { name: 'Tokyo', start: 0, end: 9 },
+  { name: 'London', start: 8, end: 17 },
+  { name: 'New York', start: 13, end: 22 },
+];
+// Which session each currency's home market trades in — used to figure out
+// which sessions actually matter for the pair currently on screen.
+const CURRENCY_SESSION = {
+  USD: 'New York', CAD: 'New York',
+  EUR: 'London', GBP: 'London', CHF: 'London',
+  JPY: 'Tokyo',
+  AUD: 'Sydney', NZD: 'Sydney',
+};
+
 const appEl = document.getElementById('app');
 const lockScreen = document.getElementById('lockScreen');
 const lockInput = document.getElementById('lockInput');
@@ -501,6 +556,9 @@ const consensusEl = document.getElementById('consensusBanner');
 const taglineEl = document.getElementById('tagline');
 const pairSelect = document.getElementById('pairSelect');
 const refreshBtn = document.getElementById('refreshBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+const sessionStripEl = document.getElementById('sessionStrip');
+const sessionNoteEl = document.getElementById('sessionNote');
 const autoToggle = document.getElementById('autoToggle');
 const autoLabel = document.getElementById('autoLabel');
 const notifToggle = document.getElementById('notifToggle');
@@ -552,6 +610,65 @@ function renderError(message) {
 
 function confPct(conf) {
   return conf === 'High' ? 100 : conf === 'Medium' ? 62 : conf === 'Low' ? 30 : 0;
+}
+
+function isSessionActive(session, utcHour) {
+  if (session.start < session.end) return utcHour >= session.start && utcHour < session.end;
+  return utcHour >= session.start || utcHour < session.end; // wraps midnight (Sydney)
+}
+
+function isForexMarketOpen(now) {
+  // Forex trades continuously Sun 22:00 UTC -> Fri 22:00 UTC.
+  const day = now.getUTCDay(); // 0 = Sun, 6 = Sat
+  const hour = now.getUTCHours();
+  if (day === 6) return false;
+  if (day === 0) return hour >= 22;
+  if (day === 5) return hour < 22;
+  return true;
+}
+
+function relevantSessionsForPair(pair) {
+  const [base, quote] = pair.split('/');
+  return new Set([CURRENCY_SESSION[base], CURRENCY_SESSION[quote]].filter(Boolean));
+}
+
+function renderSessionStrip() {
+  const now = new Date();
+  const utcLabel = now.toISOString().slice(11, 16) + ' UTC';
+
+  if (!isForexMarketOpen(now)) {
+    sessionStripEl.innerHTML = '';
+    sessionNoteEl.className = 'session-note closed';
+    sessionNoteEl.textContent = `Market closed (weekend) — ${utcLabel}`;
+    return;
+  }
+
+  const utcHour = now.getUTCHours() + now.getUTCMinutes() / 60;
+  const relevant = relevantSessionsForPair(pairSelect.value);
+  const activeNames = new Set(SESSIONS.filter(s => isSessionActive(s, utcHour)).map(s => s.name));
+
+  sessionStripEl.innerHTML = SESSIONS.map(s => {
+    const active = activeNames.has(s.name);
+    const isRelevant = relevant.has(s.name);
+    return `<div class="session-chip ${active ? 'active' : ''} ${isRelevant ? 'relevant' : ''}">
+      <span class="dot"></span>${s.name}
+    </div>`;
+  }).join('');
+
+  const activeRelevant = [...relevant].filter(n => activeNames.has(n));
+  let note;
+  let live = false;
+  if (activeRelevant.length === 0) {
+    note = `${pairSelect.value}: outside both home sessions — thinner liquidity · ${utcLabel}`;
+  } else if (activeRelevant.length === relevant.size && relevant.size > 1) {
+    note = `${[...relevant].join(' / ')} overlap — peak liquidity for ${pairSelect.value} · ${utcLabel}`;
+    live = true;
+  } else {
+    note = `${activeRelevant.join(', ')} session active for ${pairSelect.value} · ${utcLabel}`;
+    live = true;
+  }
+  sessionNoteEl.className = 'session-note' + (live ? ' live' : '');
+  sessionNoteEl.textContent = note;
 }
 
 function renderConsensus(results) {
@@ -748,12 +865,19 @@ function tick() {
 }
 
 refreshBtn.addEventListener('click', load);
+logoutBtn.addEventListener('click', () => {
+  localStorage.removeItem('appPassword');
+  if (timerId) { clearInterval(timerId); timerId = null; }
+  showLock('Logged out.');
+});
 pairSelect.addEventListener('change', () => {
   localStorage.setItem('pair', pairSelect.value);
   renderSkeletons();
   lastSignals = {};
+  renderSessionStrip();
   load();
 });
+setInterval(renderSessionStrip, 30000);
 autoToggle.addEventListener('click', () => {
   autoRefreshOn = !autoRefreshOn;
   localStorage.setItem('autoRefresh', autoRefreshOn ? 'on' : 'off');
@@ -812,6 +936,7 @@ lockSubmit.addEventListener('click', async () => {
     localStorage.setItem('appPassword', password);
     hideLock();
     updateAutoToggleUI();
+    renderSessionStrip();
     renderSkeletons();
     load();
     if (!timerId) timerId = setInterval(tick, 1000);
@@ -832,6 +957,7 @@ const cached = storedPassword();
 if (cached) {
   hideLock();
   updateAutoToggleUI();
+  renderSessionStrip();
   renderSkeletons();
   load();
   timerId = setInterval(tick, 1000);

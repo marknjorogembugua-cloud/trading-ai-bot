@@ -58,13 +58,6 @@ class handler(BaseHTTPRequestHandler):
                 if PAIR_RE.match(requested_pair):
                     base_config = dataclasses.replace(base_config, pair=requested_pair)
 
-            try:
-                account_balance = float(query.get("balance", [None])[0])
-                if account_balance <= 0:
-                    account_balance = 10000
-            except (TypeError, ValueError):
-                account_balance = 10000
-
             calendar = EconomicCalendar(base_config)
 
             results = []
@@ -72,7 +65,7 @@ class handler(BaseHTTPRequestHandler):
                 config = dataclasses.replace(base_config, granularity=tf)
                 client = TwelveDataClient(config)
                 try:
-                    r = analyze(config, client, calendar, account_balance=account_balance)
+                    r = analyze(config, client, calendar)
                     results.append(
                         {
                             "timeframe": tf,
@@ -84,7 +77,6 @@ class handler(BaseHTTPRequestHandler):
                             "stop_loss": r.stop_loss,
                             "take_profit": r.take_profit,
                             "risk_reward": r.risk_reward,
-                            "suggested_units": r.suggested_units,
                             "reasoning": r.reasoning,
                             "caveats": r.caveats,
                         }

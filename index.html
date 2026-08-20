@@ -116,25 +116,6 @@
   .auto-toggle .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
   .auto-toggle.on .dot { background: var(--buy); box-shadow: 0 0 0 3px var(--buy-dim); }
 
-  .settings-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 16px 2px;
-    max-width: var(--content-width);
-    margin: 0 auto;
-  }
-  .settings-row label { font-size: 0.76rem; color: var(--muted); }
-  .settings-row input#balanceInput {
-    background: var(--card);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 8px;
-    padding: 5px 8px;
-    font-size: 0.8rem;
-    width: 100px;
-  }
-
   .consensus-banner {
     max-width: var(--content-width);
     margin: 10px auto 0;
@@ -488,11 +469,6 @@
   </span>
 </div>
 
-<div class="settings-row">
-  <label for="balanceInput">Account balance</label>
-  <input type="number" id="balanceInput" class="mono" value="10000" min="0" step="100">
-</div>
-
 <div class="consensus-banner" id="consensusBanner"></div>
 
 <div class="summary-strip" id="summaryStrip"></div>
@@ -524,7 +500,6 @@ const summaryEl = document.getElementById('summaryStrip');
 const consensusEl = document.getElementById('consensusBanner');
 const taglineEl = document.getElementById('tagline');
 const pairSelect = document.getElementById('pairSelect');
-const balanceInput = document.getElementById('balanceInput');
 const refreshBtn = document.getElementById('refreshBtn');
 const autoToggle = document.getElementById('autoToggle');
 const autoLabel = document.getElementById('autoLabel');
@@ -543,7 +518,6 @@ for (const p of PAIRS) {
   pairSelect.appendChild(opt);
 }
 pairSelect.value = localStorage.getItem('pair') || 'EUR/USD';
-balanceInput.value = localStorage.getItem('balance') || '10000';
 
 const ICONS = {
   BUY: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>',
@@ -649,7 +623,6 @@ function renderCard(r) {
     const total = risk + reward || 1;
     const riskPct = (risk / total * 100).toFixed(1);
     const rewardPct = (reward / total * 100).toFixed(1);
-    const units = r.suggested_units != null ? Math.abs(r.suggested_units).toLocaleString() : '—';
 
     html += `
       <div class="risk-grid mono">
@@ -657,7 +630,6 @@ function renderCard(r) {
         <div class="risk-item"><span class="label">Stop-loss</span><span class="value">${r.stop_loss.toFixed(5)}</span></div>
         <div class="risk-item"><span class="label">Take-profit</span><span class="value">${r.take_profit.toFixed(5)}</span></div>
         <div class="risk-item"><span class="label">Risk : Reward</span><span class="value">1 : ${r.risk_reward.toFixed(2)}</span></div>
-        <div class="risk-item"><span class="label">Suggested size</span><span class="value">${units} units</span></div>
       </div>
       <div class="rr-bar-wrap">
         <div class="label"><span>Risk</span><span>Reward</span></div>
@@ -730,9 +702,8 @@ async function load() {
   statusEl.textContent = 'Loading…';
   refreshBtn.classList.add('spinning');
   const pair = pairSelect.value;
-  const balance = parseFloat(balanceInput.value) || 10000;
   try {
-    const res = await fetch(`${API_BASE}/api/analyze?pair=${encodeURIComponent(pair)}&balance=${balance}`, {
+    const res = await fetch(`${API_BASE}/api/analyze?pair=${encodeURIComponent(pair)}`, {
       cache: 'no-store',
       headers: { 'X-App-Password': storedPassword() },
     });
@@ -781,10 +752,6 @@ pairSelect.addEventListener('change', () => {
   localStorage.setItem('pair', pairSelect.value);
   renderSkeletons();
   lastSignals = {};
-  load();
-});
-balanceInput.addEventListener('change', () => {
-  localStorage.setItem('balance', balanceInput.value);
   load();
 });
 autoToggle.addEventListener('click', () => {

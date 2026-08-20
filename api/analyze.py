@@ -11,7 +11,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from bot.config import Config
 from bot.data.economic_calendar import EconomicCalendar
 from bot.data.twelvedata_client import TwelveDataClient
+from bot.notify.telegram import send_message as send_telegram_message
 from bot.strategy.combined_signal import analyze
+from bot.telegram_commands import handle_command
 
 TIMEFRAMES = ["5min", "15min", "30min", "1h"]
 PAIR_RE = re.compile(r"^[A-Z]{3}/[A-Z]{3}$")
@@ -21,7 +23,7 @@ class handler(BaseHTTPRequestHandler):
     def _cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "X-App-Password, Content-Type")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -38,6 +40,50 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        path = urlparse(self.path).path
+        if path.startswith("/api/telegram"):
+            self._send_json(200, {"ok": True})
+            return
+        self._handle_analyze()
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+        if path.startswith("/api/telegram"):
+            self._handle_telegram_webhook()
+            return
+        self.send_response(404)
+        self._cors_headers()
+        self.end_headers()
+
+    def _handle_telegram_webhook(self):
+        expected_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+        if expected_secret and self.headers.get("X-Telegram-Bot-Api-Secret-Token") != expected_secret:
+            self.send_response(401)
+            self._cors_headers()
+            self.end_headers()
+            return
+
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length) if length else b"{}"
+
+        self.send_response(200)
+        self._cors_headers()
+        self.end_headers()
+
+        try:
+            update = json.loads(raw)
+            message = update.get("message") or update.get("edited_message") or {}
+            text = message.get("text", "")
+            chat_id = message.get("chat", {}).get("id")
+            bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+
+            if chat_id and bot_token and text:
+                reply = handle_command(text)
+                send_telegram_message(bot_token, str(chat_id), reply)
+        except Exception:
+            pass
+
+    def _handle_analyze(self):
         expected_password = os.getenv("APP_PASSWORD")
         if expected_password and self.headers.get("X-App-Password") != expected_password:
             self._send_json(401, {"error": "Invalid or missing password."})

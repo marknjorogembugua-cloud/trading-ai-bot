@@ -1,16 +1,9 @@
 import dataclasses
-import json
-import os
 import re
-import sys
-from http.server import BaseHTTPRequestHandler
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bot.config import Config
 from bot.data.economic_calendar import EconomicCalendar
 from bot.data.twelvedata_client import TwelveDataClient
-from bot.notify.telegram import send_message
 from bot.strategy.combined_signal import analyze
 
 TIMEFRAMES = ["5min", "15min", "30min", "1h"]
@@ -63,37 +56,3 @@ def handle_command(text):
             return "Invalid pair format — use e.g. GBP/USD."
         return run_signal(pair)
     return "Unknown command. " + HELP_TEXT
-
-
-class handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        expected_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
-        if expected_secret and self.headers.get("X-Telegram-Bot-Api-Secret-Token") != expected_secret:
-            self.send_response(401)
-            self.end_headers()
-            return
-
-        length = int(self.headers.get("Content-Length", 0))
-        raw = self.rfile.read(length) if length else b"{}"
-
-        self.send_response(200)
-        self.end_headers()
-
-        try:
-            update = json.loads(raw)
-            message = update.get("message") or update.get("edited_message") or {}
-            text = message.get("text", "")
-            chat_id = message.get("chat", {}).get("id")
-            bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-
-            if chat_id and bot_token and text:
-                reply = handle_command(text)
-                send_message(bot_token, str(chat_id), reply)
-        except Exception:
-            pass
-
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps({"ok": True}).encode())

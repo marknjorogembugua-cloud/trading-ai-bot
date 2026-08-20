@@ -18,16 +18,52 @@ PAIR_RE = re.compile(r"^[A-Z]{3}/[A-Z]{3}$")
 
 
 class handler(BaseHTTPRequestHandler):
+    def _cors_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "X-App-Password, Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors_headers()
+        self.end_headers()
+
+    def _send_json(self, status, payload):
+        body = json.dumps(payload).encode()
+        self.send_response(status)
+        self.send_header("Content-type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self._cors_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
+        expected_password = os.getenv("APP_PASSWORD")
+        if expected_password and self.headers.get("X-App-Password") != expected_password:
+            self._send_json(401, {"error": "Invalid or missing password."})
+            return
+
         try:
+            query = parse_qs(urlparse(self.path).query)
+
+            if query.get("ping", [None])[0]:
+                self._send_json(200, {"ok": True})
+                return
+
             base_config = Config.load()
 
-            query = parse_qs(urlparse(self.path).query)
             requested_pair = query.get("pair", [None])[0]
             if requested_pair:
                 requested_pair = requested_pair.upper()
                 if PAIR_RE.match(requested_pair):
                     base_config = dataclasses.replace(base_config, pair=requested_pair)
+
+            try:
+                account_balance = float(query.get("balance", [None])[0])
+                if account_balance <= 0:
+                    account_balance = 10000
+            except (TypeError, ValueError):
+                account_balance = 10000
 
             calendar = EconomicCalendar(base_config)
 
@@ -36,7 +72,7 @@ class handler(BaseHTTPRequestHandler):
                 config = dataclasses.replace(base_config, granularity=tf)
                 client = TwelveDataClient(config)
                 try:
-                    r = analyze(config, client, calendar, account_balance=10000)
+                    r = analyze(config, client, calendar, account_balance=account_balance)
                     results.append(
                         {
                             "timeframe": tf,
@@ -48,6 +84,7 @@ class handler(BaseHTTPRequestHandler):
                             "stop_loss": r.stop_loss,
                             "take_profit": r.take_profit,
                             "risk_reward": r.risk_reward,
+                            "suggested_units": r.suggested_units,
                             "reasoning": r.reasoning,
                             "caveats": r.caveats,
                         }
@@ -55,17 +92,6 @@ class handler(BaseHTTPRequestHandler):
                 except Exception as e:
                     results.append({"timeframe": tf, "error": str(e)})
 
-            body = json.dumps({"pair": base_config.pair, "results": results}).encode()
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(body)
+            self._send_json(200, {"pair": base_config.pair, "results": results})
         except Exception as e:
-            body = json.dumps({"error": str(e)}).encode()
-            self.send_response(500)
-            self.send_header("Content-type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(body)
+            self._send_json(500, {"error": str(e)})

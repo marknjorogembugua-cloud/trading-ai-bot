@@ -6,6 +6,7 @@ from bot.config import Config
 from bot.data.economic_calendar import EconomicCalendar
 from bot.data.twelvedata_client import TwelveDataClient
 from bot.notify.push import send_push
+from bot.notify.telegram import send_message as send_telegram
 from bot.strategy.combined_signal import analyze, format_report
 
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -53,6 +54,18 @@ def main():
                     f"Entry {result.entry:.5f} | SL {result.stop_loss:.5f} | "
                     f"TP {result.take_profit:.5f} | R:R 1:{result.risk_reward:.2f} | "
                     f"Confidence {result.confidence}"
+                ),
+            )
+
+        if result.signal != "NO TRADE" and base_config.telegram_bot_token:
+            send_telegram(
+                bot_token=base_config.telegram_bot_token,
+                chat_id=base_config.telegram_chat_id,
+                text=(
+                    f"<b>{result.pair} {tf}: {result.signal}</b>\n"
+                    f"Entry {result.entry:.5f}\n"
+                    f"SL {result.stop_loss:.5f}  TP {result.take_profit:.5f}\n"
+                    f"R:R 1:{result.risk_reward:.2f}  Confidence {result.confidence}"
                 ),
             )
 

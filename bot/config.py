@@ -18,6 +18,10 @@ class Config:
     # Push notifications (optional — ntfy.sh topic, degrades gracefully if unset)
     ntfy_topic: Optional[str]
 
+    # Telegram bot (optional — degrades gracefully if unset)
+    telegram_bot_token: Optional[str]
+    telegram_chat_id: Optional[str]
+
     # Legacy/optional: only needed if you later wire up automatic execution
     # through a broker that supports your country.
     oanda_api_key: Optional[str]
@@ -61,6 +65,8 @@ class Config:
             twelvedata_api_key=twelvedata_key,
             finnhub_api_key=os.getenv("FINNHUB_API_KEY") or None,
             ntfy_topic=os.getenv("NTFY_TOPIC") or None,
+            telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN") or None,
+            telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID") or None,
             oanda_api_key=os.getenv("OANDA_API_KEY") or None,
             oanda_account_id=os.getenv("OANDA_ACCOUNT_ID") or None,
             oanda_environment=os.getenv("OANDA_ENVIRONMENT", "practice"),

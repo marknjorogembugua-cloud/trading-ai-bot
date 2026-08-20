@@ -13,7 +13,7 @@ from bot.data.economic_calendar import EconomicCalendar
 from bot.data.twelvedata_client import TwelveDataClient
 from bot.strategy.combined_signal import analyze
 
-TIMEFRAMES = ["5min", "15min", "30min"]
+TIMEFRAMES = ["5min", "15min", "30min", "1h"]
 PAIR_RE = re.compile(r"^[A-Z]{3}/[A-Z]{3}$")
 
 

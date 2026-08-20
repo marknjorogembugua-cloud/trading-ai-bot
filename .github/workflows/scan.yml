@@ -25,4 +25,4 @@ jobs:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           PAIR: EUR/USD
-        run: python -m bot.analyze --timeframes 5min,15min,30min --balance 10000
+        run: python -m bot.analyze --timeframes 5min,15min,30min,1h --balance 10000

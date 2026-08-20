@@ -111,6 +111,7 @@
     max-width: var(--content-width);
     margin: 0 auto;
   }
+  .status-toggles { display: flex; align-items: center; gap: 14px; }
   .auto-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
   .auto-toggle .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
   .auto-toggle.on .dot { background: var(--buy); box-shadow: 0 0 0 3px var(--buy-dim); }
@@ -475,9 +476,15 @@
 
 <div class="status-row">
   <span id="status">Loading…</span>
-  <span class="auto-toggle on" id="autoToggle">
-    <span class="dot"></span>
-    <span id="autoLabel">Auto-refresh 60s</span>
+  <span class="status-toggles">
+    <span class="auto-toggle" id="notifToggle">
+      <span class="dot"></span>
+      <span id="notifLabel">Notify off</span>
+    </span>
+    <span class="auto-toggle on" id="autoToggle">
+      <span class="dot"></span>
+      <span id="autoLabel">Auto-refresh 60s</span>
+    </span>
   </span>
 </div>
 
@@ -521,8 +528,11 @@ const balanceInput = document.getElementById('balanceInput');
 const refreshBtn = document.getElementById('refreshBtn');
 const autoToggle = document.getElementById('autoToggle');
 const autoLabel = document.getElementById('autoLabel');
+const notifToggle = document.getElementById('notifToggle');
+const notifLabel = document.getElementById('notifLabel');
 
 let autoRefreshOn = localStorage.getItem('autoRefresh') !== 'off';
+let notificationsOn = localStorage.getItem('notifications') === 'on' && 'Notification' in window && Notification.permission === 'granted';
 let countdown = REFRESH_SECONDS;
 let lastSignals = {};
 
@@ -547,7 +557,7 @@ function sigClass(signal) {
 
 function renderSkeletons() {
   resultsEl.innerHTML = '';
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     const sk = document.createElement('div');
     sk.className = 'skeleton-card';
     sk.innerHTML = '<div class="sk-line w1"></div><div class="sk-line w2"></div><div class="sk-line w3"></div>';
@@ -610,6 +620,7 @@ function renderCard(r) {
   const prev = lastSignals[r.timeframe];
   if (prev !== undefined && prev !== r.signal && r.signal !== 'NO TRADE') {
     card.classList.add('flash');
+    notifySignal(r);
   }
   lastSignals[r.timeframe] = r.signal;
 
@@ -698,6 +709,23 @@ function storedPassword() {
   return localStorage.getItem('appPassword') || '';
 }
 
+function notifySignal(r) {
+  if (!notificationsOn || !('Notification' in window) || Notification.permission !== 'granted') return;
+  const title = `${r.pair} ${r.timeframe}: ${r.signal}`;
+  const body = `Entry ${r.entry.toFixed(5)} · SL ${r.stop_loss.toFixed(5)} · TP ${r.take_profit.toFixed(5)} · R:R 1:${r.risk_reward.toFixed(2)}`;
+  const options = { body, icon: 'icon-192.png', badge: 'icon-192.png', tag: 'fx-' + r.timeframe, renotify: true };
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.ready.then((reg) => reg.showNotification(title, options));
+  } else {
+    new Notification(title, options);
+  }
+}
+
+function updateNotifToggleUI() {
+  notifToggle.classList.toggle('on', notificationsOn);
+  notifLabel.textContent = notificationsOn ? 'Notify on' : 'Notify off';
+}
+
 async function load() {
   statusEl.textContent = 'Loading…';
   refreshBtn.classList.add('spinning');
@@ -765,6 +793,18 @@ autoToggle.addEventListener('click', () => {
   countdown = REFRESH_SECONDS;
   updateAutoToggleUI();
 });
+
+notifToggle.addEventListener('click', async () => {
+  if (!('Notification' in window)) return;
+  if (!notificationsOn) {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { updateNotifToggleUI(); return; }
+  }
+  notificationsOn = !notificationsOn;
+  localStorage.setItem('notifications', notificationsOn ? 'on' : 'off');
+  updateNotifToggleUI();
+});
+updateNotifToggleUI();
 
 function openInfo() { infoModal.classList.remove('hidden'); }
 function closeInfo() { infoModal.classList.add('hidden'); }

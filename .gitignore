@@ -6,3 +6,5 @@ venv/
 logs/*.csv
 logs/*.log
 !logs/.gitkeep
+.vercel
+.env*

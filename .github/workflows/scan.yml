@@ -1,0 +1,28 @@
+name: Multi-timeframe forex scan
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # every 15 minutes (GitHub best-effort timing, can lag under load)
+  workflow_dispatch: {}       # allows manual triggering from the Actions tab / gh CLI
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run multi-timeframe scan
+        env:
+          TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          PAIR: EUR/USD
+        run: python -m bot.analyze --timeframes 5min,15min,30min --balance 10000

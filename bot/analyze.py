@@ -11,6 +11,21 @@ from bot.strategy.combined_signal import analyze, format_report
 
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s [%(levelname)s] %(message)s")
 
+# Mean-reversion signals never reach "High" confidence (capped at "Medium" in
+# combined_signal.py), but 1h/30min mean-reversion is the only setup with
+# actual backtested edge (see README's validated-performance table) — so a
+# High-confidence-only filter would silence the validated strategy and only
+# admit the unvalidated trend one. Alert on High confidence generally, or
+# Medium confidence specifically on a backtested-profitable mean-reversion
+# timeframe.
+VALIDATED_RANGING_TIMEFRAMES = {"1h", "30min"}
+
+
+def is_alert_worthy(result, timeframe):
+    if result.confidence == "High":
+        return True
+    return result.regime == "ranging" and result.confidence == "Medium" and timeframe in VALIDATED_RANGING_TIMEFRAMES
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -57,7 +72,7 @@ def main():
                 ),
             )
 
-        if result.signal != "NO TRADE" and base_config.telegram_bot_token:
+        if result.signal != "NO TRADE" and is_alert_worthy(result, tf) and base_config.telegram_bot_token:
             send_telegram(
                 bot_token=base_config.telegram_bot_token,
                 chat_id=base_config.telegram_chat_id,

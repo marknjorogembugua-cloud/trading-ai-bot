@@ -1,9 +1,20 @@
+import time
+
 import pandas as pd
 import requests
 
 from bot.config import Config
 
 BASE_URL = "https://api.twelvedata.com"
+
+# Process-wide cache shared by every TwelveDataClient instance. On Vercel's
+# Fluid Compute this survives across requests handled by the same warm
+# instance, so concurrent callers (multiple open PWA tabs, the Telegram bot,
+# the GitHub Actions scan) hitting the same pair/timeframe within the TTL
+# reuse one API call instead of each spending their own credit — this is
+# what was blowing through the free-tier 800 credits/day limit.
+_CACHE_TTL_SECONDS = 90
+_candle_cache: dict[tuple[str, str, int], tuple[float, pd.DataFrame]] = {}
 
 
 class TwelveDataError(RuntimeError):
@@ -19,6 +30,11 @@ class TwelveDataClient:
         self.config = config
 
     def get_candles(self, outputsize: int = 300) -> pd.DataFrame:
+        cache_key = (self.config.pair, self.config.granularity, outputsize)
+        cached = _candle_cache.get(cache_key)
+        if cached and time.monotonic() - cached[0] < _CACHE_TTL_SECONDS:
+            return cached[1]
+
         params = {
             "symbol": self.config.pair,
             "interval": self.config.granularity,
@@ -42,7 +58,10 @@ class TwelveDataClient:
         df = df.set_index("datetime").sort_index()
         for col in ("open", "high", "low", "close"):
             df[col] = df[col].astype(float)
-        return df[["open", "high", "low", "close"]]
+        df = df[["open", "high", "low", "close"]]
+
+        _candle_cache[cache_key] = (time.monotonic(), df)
+        return df
 
     def get_latest_price(self) -> float:
         params = {"symbol": self.config.pair, "apikey": self.config.twelvedata_api_key}

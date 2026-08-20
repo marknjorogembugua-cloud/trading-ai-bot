@@ -2,7 +2,7 @@ name: Multi-timeframe forex scan
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # every 15 minutes (GitHub best-effort timing, can lag under load)
+    - cron: "*/30 * * * *"   # every 30 minutes (GitHub best-effort timing, can lag under load)
   workflow_dispatch: {}       # allows manual triggering from the Actions tab / gh CLI
 
 jobs:

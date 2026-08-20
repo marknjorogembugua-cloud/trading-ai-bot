@@ -4,150 +4,457 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>FX Signals</title>
+<meta name="description" content="Regime-adaptive forex advisory signals — technical + fundamental.">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<meta name="theme-color" content="#0f172a">
+<meta name="theme-color" content="#0b1120">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
   :root {
-    --bg: #0f172a;
-    --card: #1e293b;
-    --border: #334155;
-    --text: #e2e8f0;
-    --muted: #94a3b8;
+    --bg: #0b1120;
+    --bg-elevated: #0f172a;
+    --card: #141d33;
+    --card-border: #232f4d;
+    --border: #232f4d;
+    --text: #e7ecf7;
+    --muted: #8a96b3;
+    --faint: #566089;
+    --accent: #5b8def;
     --buy: #22c55e;
-    --sell: #ef4444;
-    --no-trade: #64748b;
+    --buy-dim: rgba(34,197,94,0.14);
+    --sell: #f0475f;
+    --sell-dim: rgba(240,71,95,0.14);
+    --no-trade: #7c88ab;
+    --no-trade-dim: rgba(124,136,171,0.12);
+    --amber: #f5b544;
+    --radius: 16px;
+    --shadow: 0 8px 24px -12px rgba(0,0,0,0.6);
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { color-scheme: dark; }
   body {
     margin: 0;
-    background: var(--bg);
+    background:
+      radial-gradient(1200px 500px at 50% -10%, rgba(91,141,239,0.10), transparent 60%),
+      var(--bg);
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    padding: env(safe-area-inset-top) 16px 32px;
+    -webkit-font-smoothing: antialiased;
     min-height: 100vh;
+    padding-bottom: 40px;
   }
-  header {
+  .mono { font-family: ui-monospace, "SF Mono", "Roboto Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+  header.topbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px 0 12px;
+    gap: 12px;
+    padding: calc(env(safe-area-inset-top) + 14px) 16px 12px;
+    background: rgba(11,17,32,0.82);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
   }
-  h1 { font-size: 1.3rem; margin: 0; }
-  #pair { color: var(--muted); font-size: 0.9rem; }
-  button#refresh {
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .brand img { width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0; }
+  .brand-text { min-width: 0; }
+  .brand-text h1 { font-size: 1.05rem; margin: 0; letter-spacing: -0.01em; line-height: 1.2; }
+  .brand-text .tagline { font-size: 0.72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .topbar-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  select#pairSelect {
+    appearance: none;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 8px 28px 8px 12px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238a96b3' stroke-width='1.5' fill='none' fill-rule='evenodd'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+  button#refreshBtn {
     background: var(--card);
     border: 1px solid var(--border);
     color: var(--text);
     border-radius: 10px;
-    padding: 10px 14px;
-    font-size: 0.9rem;
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    font-size: 1rem;
   }
-  button#refresh:active { opacity: 0.7; }
-  #status { color: var(--muted); font-size: 0.8rem; padding-bottom: 12px; }
-  .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 16px;
-    margin-bottom: 14px;
-  }
-  .card-top {
+  button#refreshBtn:active { transform: scale(0.94); }
+  button#refreshBtn.spinning svg { animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .status-row {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 8px;
+    align-items: center;
+    padding: 10px 16px 4px;
+    font-size: 0.78rem;
+    color: var(--muted);
   }
-  .tf { font-weight: 600; font-size: 1rem; }
-  .regime { color: var(--muted); font-size: 0.8rem; }
-  .signal {
-    font-weight: 700;
-    font-size: 1.1rem;
-    padding: 2px 10px;
+  .auto-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .auto-toggle .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+  .auto-toggle.on .dot { background: var(--buy); box-shadow: 0 0 0 3px var(--buy-dim); }
+
+  .summary-strip {
+    display: flex;
+    gap: 8px;
+    padding: 10px 16px 4px;
+    overflow-x: auto;
+  }
+  .summary-chip {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: center;
+    padding: 8px 6px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    font-size: 0.72rem;
+    color: var(--muted);
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .summary-chip .tf-label { font-weight: 600; color: var(--text); }
+  .summary-chip .sig-label { font-weight: 700; font-size: 0.68rem; letter-spacing: 0.02em; }
+  .summary-chip.BUY { background: var(--buy-dim); border-color: rgba(34,197,94,0.35); }
+  .summary-chip.BUY .sig-label { color: var(--buy); }
+  .summary-chip.SELL { background: var(--sell-dim); border-color: rgba(240,71,95,0.35); }
+  .summary-chip.SELL .sig-label { color: var(--sell); }
+  .summary-chip.NOTRADE .sig-label { color: var(--no-trade); }
+
+  main { padding: 12px 16px 0; max-width: 560px; margin: 0 auto; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px;
+    margin-bottom: 14px;
+    scroll-margin-top: 140px;
+    animation: rise 0.35s ease both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .card.flash { animation: rise 0.35s ease both, flashring 1.6s ease-out 0.1s; }
+  @keyframes flashring {
+    0% { box-shadow: var(--shadow), 0 0 0 0 rgba(91,141,239,0.55); }
+    100% { box-shadow: var(--shadow), 0 0 0 14px rgba(91,141,239,0); }
+  }
+
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; gap: 8px; }
+  .card-top-left { display: flex; align-items: center; gap: 8px; }
+  .tf { font-weight: 700; font-size: 0.95rem; }
+  .regime-pill {
+    font-size: 0.68rem;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 8px;
+    text-transform: capitalize;
+  }
+  .conf-pill { font-size: 0.68rem; font-weight: 700; border-radius: 999px; padding: 2px 8px; }
+  .conf-pill.High { background: var(--buy-dim); color: var(--buy); }
+  .conf-pill.Medium { background: rgba(245,181,68,0.14); color: var(--amber); }
+  .conf-pill.Low { background: var(--no-trade-dim); color: var(--no-trade); }
+  .conf-pill.NA { background: var(--no-trade-dim); color: var(--faint); }
+
+  .signal-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .signal-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 800;
+    font-size: 1.05rem;
+    letter-spacing: 0.01em;
+    padding: 5px 12px 5px 10px;
+    border-radius: 10px;
+  }
+  .signal-badge svg { width: 14px; height: 14px; }
+  .signal-badge.BUY { background: var(--buy-dim); color: var(--buy); }
+  .signal-badge.SELL { background: var(--sell-dim); color: var(--sell); }
+  .signal-badge.NOTRADE { background: var(--no-trade-dim); color: var(--no-trade); }
+
+  .copy-btn {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
     border-radius: 8px;
-    display: inline-block;
+    padding: 5px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 5px;
   }
-  .signal.BUY { background: rgba(34,197,94,0.15); color: var(--buy); }
-  .signal.SELL { background: rgba(239,68,68,0.15); color: var(--sell); }
-  .signal.NOTRADE { background: rgba(100,116,139,0.15); color: var(--no-trade); }
-  .risk-row {
+  .copy-btn svg { width: 12px; height: 12px; }
+  .copy-btn.copied { color: var(--buy); border-color: rgba(34,197,94,0.35); }
+
+  .risk-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 6px 12px;
-    margin: 10px 0;
-    font-size: 0.9rem;
+    gap: 10px 14px;
+    margin: 14px 0 4px;
   }
-  .risk-row div span { color: var(--muted); }
-  details { margin-top: 8px; font-size: 0.85rem; color: var(--muted); }
-  summary { cursor: pointer; color: var(--text); }
+  .risk-item { font-size: 0.9rem; }
+  .risk-item .label { display: block; color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
+  .risk-item .value { font-weight: 600; }
+
+  .rr-bar-wrap { margin: 12px 0 4px; }
+  .rr-bar-wrap .label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px; display: flex; justify-content: space-between; }
+  .rr-bar { height: 6px; border-radius: 999px; overflow: hidden; display: flex; background: var(--bg-elevated); }
+  .rr-bar .risk-seg { background: var(--sell); }
+  .rr-bar .reward-seg { background: var(--buy); }
+
+  .conf-bar-wrap { margin: 12px 0 2px; }
+  .conf-bar-wrap .label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px; }
+  .conf-bar { height: 6px; border-radius: 999px; background: var(--bg-elevated); overflow: hidden; }
+  .conf-bar .fill { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+  .conf-bar .fill.High { background: var(--buy); }
+  .conf-bar .fill.Medium { background: var(--amber); }
+  .conf-bar .fill.Low { background: var(--no-trade); }
+
+  details { margin-top: 10px; font-size: 0.85rem; color: var(--muted); }
+  summary { cursor: pointer; color: var(--text); font-weight: 600; font-size: 0.82rem; padding: 4px 0; }
+  summary::marker { color: var(--faint); }
   ul { margin: 6px 0 0; padding-left: 18px; }
-  li { margin-bottom: 3px; }
-  .error { color: var(--sell); font-size: 0.85rem; }
+  li { margin-bottom: 4px; line-height: 1.4; }
+
+  .error-card { color: var(--sell); font-size: 0.88rem; }
+  .error-panel {
+    text-align: center;
+    padding: 32px 20px;
+    color: var(--muted);
+  }
+  .error-panel .msg { color: var(--sell); font-size: 0.9rem; margin-bottom: 14px; }
+  .retry-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .skeleton-card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 14px;
+    height: 132px;
+  }
+  .sk-line {
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--bg-elevated) 25%, #1c2942 37%, var(--bg-elevated) 63%);
+    background-size: 400% 100%;
+    animation: shimmer 1.4s ease infinite;
+  }
+  @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+  .sk-line.w1 { width: 40%; height: 14px; margin-bottom: 14px; }
+  .sk-line.w2 { width: 60%; height: 24px; margin-bottom: 18px; }
+  .sk-line.w3 { width: 100%; height: 34px; }
+
+  footer.disclaimer {
+    max-width: 560px;
+    margin: 8px auto 0;
+    padding: 10px 16px 20px;
+    font-size: 0.72rem;
+    color: var(--faint);
+    text-align: center;
+    line-height: 1.5;
+  }
 </style>
 </head>
 <body>
-<header>
-  <div>
-    <h1>FX Signals</h1>
-    <div id="pair">—</div>
+<header class="topbar">
+  <div class="brand">
+    <img src="icon-192.png" alt="">
+    <div class="brand-text">
+      <h1>FX Signals</h1>
+      <div class="tagline" id="tagline">Technical + fundamental · regime-adaptive</div>
+    </div>
   </div>
-  <button id="refresh">Refresh</button>
+  <div class="topbar-controls">
+    <select id="pairSelect" aria-label="Currency pair"></select>
+    <button id="refreshBtn" aria-label="Refresh now">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    </button>
+  </div>
 </header>
-<div id="status">Loading…</div>
-<div id="results"></div>
+
+<div class="status-row">
+  <span id="status">Loading…</span>
+  <span class="auto-toggle on" id="autoToggle">
+    <span class="dot"></span>
+    <span id="autoLabel">Auto-refresh 60s</span>
+  </span>
+</div>
+
+<div class="summary-strip" id="summaryStrip"></div>
+
+<main id="results"></main>
+
+<footer class="disclaimer">
+  Advisory only — not financial advice, does not place trades. Paper-verify<br>before risking real money. See caveats on each signal.
+</footer>
 
 <script>
-async function load() {
-  const statusEl = document.getElementById('status');
-  const resultsEl = document.getElementById('results');
-  const pairEl = document.getElementById('pair');
-  statusEl.textContent = 'Loading…';
-  try {
-    const res = await fetch('https://trading-ai-bot-marks-projects-a0532bf7.vercel.app/api/analyze', { cache: 'no-store' });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    pairEl.textContent = data.pair;
-    resultsEl.innerHTML = '';
-    for (const r of data.results) {
-      resultsEl.appendChild(renderCard(r));
-    }
-    statusEl.textContent = 'Updated ' + new Date().toLocaleTimeString();
-  } catch (e) {
-    statusEl.textContent = '';
-    resultsEl.innerHTML = '<div class="card error">Failed to load: ' + e.message + '</div>';
+const API_BASE = 'https://trading-ai-bot-marks-projects-a0532bf7.vercel.app';
+const PAIRS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'USD/CHF', 'NZD/USD', 'EUR/GBP'];
+const REFRESH_SECONDS = 60;
+
+const statusEl = document.getElementById('status');
+const resultsEl = document.getElementById('results');
+const summaryEl = document.getElementById('summaryStrip');
+const taglineEl = document.getElementById('tagline');
+const pairSelect = document.getElementById('pairSelect');
+const refreshBtn = document.getElementById('refreshBtn');
+const autoToggle = document.getElementById('autoToggle');
+const autoLabel = document.getElementById('autoLabel');
+
+let autoRefreshOn = localStorage.getItem('autoRefresh') !== 'off';
+let countdown = REFRESH_SECONDS;
+let timerId = null;
+let lastSignals = {};
+
+for (const p of PAIRS) {
+  const opt = document.createElement('option');
+  opt.value = p;
+  opt.textContent = p;
+  pairSelect.appendChild(opt);
+}
+pairSelect.value = localStorage.getItem('pair') || 'EUR/USD';
+updateAutoToggleUI();
+
+const ICONS = {
+  BUY: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>',
+  SELL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>',
+  NOTRADE: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>',
+};
+
+function sigClass(signal) {
+  return signal === 'NO TRADE' ? 'NOTRADE' : signal;
+}
+
+function renderSkeletons() {
+  resultsEl.innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const sk = document.createElement('div');
+    sk.className = 'skeleton-card';
+    sk.innerHTML = '<div class="sk-line w1"></div><div class="sk-line w2"></div><div class="sk-line w3"></div>';
+    resultsEl.appendChild(sk);
+  }
+}
+
+function renderError(message) {
+  resultsEl.innerHTML = '';
+  const panel = document.createElement('div');
+  panel.className = 'error-panel';
+  panel.innerHTML = `<div class="msg">${message}</div><button class="retry-btn" id="retryBtn">Try again</button>`;
+  resultsEl.appendChild(panel);
+  document.getElementById('retryBtn').addEventListener('click', load);
+  summaryEl.innerHTML = '';
+}
+
+function confPct(conf) {
+  return conf === 'High' ? 100 : conf === 'Medium' ? 62 : conf === 'Low' ? 30 : 0;
+}
+
+function renderSummaryStrip(results) {
+  summaryEl.innerHTML = '';
+  for (const r of results) {
+    const chip = document.createElement('div');
+    const cls = r.error ? 'NOTRADE' : sigClass(r.signal);
+    chip.className = 'summary-chip ' + cls;
+    chip.innerHTML = `<span class="tf-label">${r.timeframe}</span><span class="sig-label">${r.error ? 'ERR' : r.signal}</span>`;
+    chip.addEventListener('click', () => {
+      document.getElementById('card-' + r.timeframe)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    summaryEl.appendChild(chip);
   }
 }
 
 function renderCard(r) {
   const card = document.createElement('div');
   card.className = 'card';
+  card.id = 'card-' + r.timeframe;
+
   if (r.error) {
-    card.innerHTML = `<div class="card-top"><span class="tf">${r.timeframe}</span></div><div class="error">${r.error}</div>`;
+    card.innerHTML = `<div class="card-top"><span class="tf">${r.timeframe}</span></div><div class="error-card">${r.error}</div>`;
     return card;
   }
-  const sigClass = r.signal === 'NO TRADE' ? 'NOTRADE' : r.signal;
+
+  const cls = sigClass(r.signal);
+  const prev = lastSignals[r.timeframe];
+  if (prev !== undefined && prev !== r.signal && r.signal !== 'NO TRADE') {
+    card.classList.add('flash');
+  }
+  lastSignals[r.timeframe] = r.signal;
+
+  const confClass = r.confidence === 'N/A' ? 'NA' : r.confidence;
+
   let html = `
     <div class="card-top">
-      <span class="tf">${r.timeframe}</span>
-      <span class="regime">${r.regime}</span>
+      <div class="card-top-left">
+        <span class="tf">${r.timeframe}</span>
+        <span class="regime-pill">${r.regime}</span>
+      </div>
+      <span class="conf-pill ${confClass}">${r.confidence}</span>
     </div>
-    <span class="signal ${sigClass}">${r.signal}</span>
+    <div class="signal-row">
+      <span class="signal-badge ${cls}">${ICONS[cls]}${r.signal}</span>
+      ${r.signal !== 'NO TRADE' ? `<button class="copy-btn" data-copy>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy
+      </button>` : ''}
+    </div>
   `;
+
   if (r.signal !== 'NO TRADE') {
+    const risk = Math.abs(r.entry - r.stop_loss);
+    const reward = Math.abs(r.take_profit - r.entry);
+    const total = risk + reward || 1;
+    const riskPct = (risk / total * 100).toFixed(1);
+    const rewardPct = (reward / total * 100).toFixed(1);
+
     html += `
-      <div class="risk-row">
-        <div><span>Entry </span>${r.entry.toFixed(5)}</div>
-        <div><span>Confidence </span>${r.confidence}</div>
-        <div><span>Stop-loss </span>${r.stop_loss.toFixed(5)}</div>
-        <div><span>R:R </span>1:${r.risk_reward.toFixed(2)}</div>
-        <div><span>Take-profit </span>${r.take_profit.toFixed(5)}</div>
+      <div class="risk-grid mono">
+        <div class="risk-item"><span class="label">Entry</span><span class="value">${r.entry.toFixed(5)}</span></div>
+        <div class="risk-item"><span class="label">Stop-loss</span><span class="value">${r.stop_loss.toFixed(5)}</span></div>
+        <div class="risk-item"><span class="label">Take-profit</span><span class="value">${r.take_profit.toFixed(5)}</span></div>
+        <div class="risk-item"><span class="label">Risk : Reward</span><span class="value">1 : ${r.risk_reward.toFixed(2)}</span></div>
+      </div>
+      <div class="rr-bar-wrap">
+        <div class="label"><span>Risk</span><span>Reward</span></div>
+        <div class="rr-bar">
+          <div class="risk-seg" style="width:${riskPct}%"></div>
+          <div class="reward-seg" style="width:${rewardPct}%"></div>
+        </div>
       </div>
     `;
   }
+
   html += `
+    <div class="conf-bar-wrap">
+      <div class="label">Confidence — ${r.confidence}</div>
+      <div class="conf-bar"><div class="fill ${confClass}" style="width:${confPct(r.confidence)}%"></div></div>
+    </div>
     <details>
       <summary>Reasoning</summary>
       <ul>${r.reasoning.map(x => `<li>${x}</li>`).join('')}</ul>
@@ -161,12 +468,87 @@ function renderCard(r) {
       </details>
     `;
   }
+
   card.innerHTML = html;
+
+  const copyBtn = card.querySelector('[data-copy]');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      const text = `${r.pair} ${r.timeframe} ${r.signal}\nEntry ${r.entry.toFixed(5)}  SL ${r.stop_loss.toFixed(5)}  TP ${r.take_profit.toFixed(5)}\nR:R 1:${r.risk_reward.toFixed(2)}  Confidence ${r.confidence}`;
+      navigator.clipboard.writeText(text).then(() => {
+        copyBtn.classList.add('copied');
+        copyBtn.lastChild.textContent = ' Copied';
+        setTimeout(() => { copyBtn.classList.remove('copied'); copyBtn.lastChild.textContent = ' Copy'; }, 1500);
+      });
+    });
+  }
+
   return card;
 }
 
-document.getElementById('refresh').addEventListener('click', load);
+async function load() {
+  statusEl.textContent = 'Loading…';
+  refreshBtn.classList.add('spinning');
+  const pair = pairSelect.value;
+  try {
+    const res = await fetch(`${API_BASE}/api/analyze?pair=${encodeURIComponent(pair)}`, { cache: 'no-store' });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    taglineEl.textContent = data.pair + ' · Technical + fundamental';
+    renderSummaryStrip(data.results);
+    resultsEl.innerHTML = '';
+    for (const r of data.results) {
+      resultsEl.appendChild(renderCard(r));
+    }
+    statusEl.textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    statusEl.textContent = 'Error';
+    renderError('Failed to load: ' + e.message);
+  } finally {
+    refreshBtn.classList.remove('spinning');
+    countdown = REFRESH_SECONDS;
+  }
+}
+
+function updateAutoToggleUI() {
+  autoToggle.classList.toggle('on', autoRefreshOn);
+  autoLabel.textContent = autoRefreshOn ? `Auto-refresh ${countdown}s` : 'Auto-refresh off';
+}
+
+function tick() {
+  if (!autoRefreshOn) return;
+  countdown -= 1;
+  if (countdown <= 0) {
+    load();
+  } else {
+    autoLabel.textContent = `Auto-refresh ${countdown}s`;
+  }
+}
+
+refreshBtn.addEventListener('click', load);
+pairSelect.addEventListener('change', () => {
+  localStorage.setItem('pair', pairSelect.value);
+  renderSkeletons();
+  lastSignals = {};
+  load();
+});
+autoToggle.addEventListener('click', () => {
+  autoRefreshOn = !autoRefreshOn;
+  localStorage.setItem('autoRefresh', autoRefreshOn ? 'on' : 'off');
+  countdown = REFRESH_SECONDS;
+  updateAutoToggleUI();
+});
+
+renderSkeletons();
 load();
+timerId = setInterval(tick, 1000);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>

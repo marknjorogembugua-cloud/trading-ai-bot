@@ -1,8 +1,10 @@
 import dataclasses
 import json
 import os
+import re
 import sys
 from http.server import BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -12,12 +14,21 @@ from bot.data.twelvedata_client import TwelveDataClient
 from bot.strategy.combined_signal import analyze
 
 TIMEFRAMES = ["5min", "15min", "30min"]
+PAIR_RE = re.compile(r"^[A-Z]{3}/[A-Z]{3}$")
 
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             base_config = Config.load()
+
+            query = parse_qs(urlparse(self.path).query)
+            requested_pair = query.get("pair", [None])[0]
+            if requested_pair:
+                requested_pair = requested_pair.upper()
+                if PAIR_RE.match(requested_pair):
+                    base_config = dataclasses.replace(base_config, pair=requested_pair)
+
             calendar = EconomicCalendar(base_config)
 
             results = []

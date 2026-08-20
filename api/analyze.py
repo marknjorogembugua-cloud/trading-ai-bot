@@ -1,12 +1,14 @@
 import dataclasses
 import json
+import mimetypes
 import os
 import re
 import sys
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 
 from bot.config import Config
 from bot.data.economic_calendar import EconomicCalendar
@@ -17,6 +19,19 @@ from bot.telegram_commands import handle_command
 
 TIMEFRAMES = ["5min", "15min", "30min", "1h"]
 PAIR_RE = re.compile(r"^[A-Z]{3}/[A-Z]{3}$")
+
+# Vercel's current Python runtime routes every request through this single
+# function (no separate static hosting once a Python entrypoint is
+# declared), so the PWA shell has to be served from here too. Whitelist
+# only these known files — never serve an arbitrary path off disk.
+STATIC_FILES = {
+    "/": "index.html",
+    "/index.html": "index.html",
+    "/manifest.json": "manifest.json",
+    "/icon-192.png": "icon-192.png",
+    "/icon-512.png": "icon-512.png",
+    "/sw.js": "sw.js",
+}
 
 
 class handler(BaseHTTPRequestHandler):
@@ -39,12 +54,36 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_static(self, path):
+        filename = STATIC_FILES.get(path)
+        if not filename:
+            self.send_response(404)
+            self._cors_headers()
+            self.end_headers()
+            return
+
+        file_path = os.path.join(PROJECT_ROOT, filename)
+        with open(file_path, "rb") as f:
+            body = f.read()
+
+        content_type, _ = mimetypes.guess_type(filename)
+        self.send_response(200)
+        self.send_header("Content-type", content_type or "application/octet-stream")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self._cors_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
         path = urlparse(self.path).path
         if path.startswith("/api/telegram"):
             self._send_json(200, {"ok": True})
             return
-        self._handle_analyze()
+        if path.startswith("/api/analyze"):
+            self._handle_analyze()
+            return
+        self._serve_static(path)
 
     def do_POST(self):
         path = urlparse(self.path).path

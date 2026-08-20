@@ -43,7 +43,8 @@ class TwelveDataClient:
             "order": "ASC",
         }
         resp = requests.get(f"{BASE_URL}/time_series", params=params, timeout=15)
-        resp.raise_for_status()
+        if not resp.ok:
+            raise TwelveDataError(f"{resp.status_code} error from Twelve Data for {self.config.pair} {self.config.granularity}.")
         payload = resp.json()
 
         if payload.get("status") == "error":
@@ -66,7 +67,8 @@ class TwelveDataClient:
     def get_latest_price(self) -> float:
         params = {"symbol": self.config.pair, "apikey": self.config.twelvedata_api_key}
         resp = requests.get(f"{BASE_URL}/price", params=params, timeout=15)
-        resp.raise_for_status()
+        if not resp.ok:
+            raise TwelveDataError(f"{resp.status_code} error from Twelve Data for {self.config.pair}.")
         payload = resp.json()
         if "price" not in payload:
             raise TwelveDataError(payload.get("message", "Unknown Twelve Data error"))
